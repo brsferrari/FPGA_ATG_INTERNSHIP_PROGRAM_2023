@@ -97,7 +97,7 @@ architecture ckt of validacao is
 		Ssoma <= soma;
 		ideal_seq_num_out <= ideal_seq_num;
 		
-		Validacao : Process(clk)
+		Validacao : Process(clk, rst)
 			
 			begin
 			
@@ -309,7 +309,7 @@ architecture ckt of validacao is
 										ready <= '1';
 										synchronize <= '1'; --volto a ler o header
 										payload <= transmit_data;
-										transmission <= '1';
+										transmission <= '1'; --volto a validar os dados
 										estado2 <= "000";
 									else
 										contador_len_payload <= contador_len_payload + 1;

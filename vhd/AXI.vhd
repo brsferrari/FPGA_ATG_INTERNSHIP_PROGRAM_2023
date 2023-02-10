@@ -22,8 +22,6 @@ entity AXI is
 		signal Checksum				: out std_logic_vector(15 downto 0);
 		signal Packet_length			: out std_logic_vector(15 downto 0)
 	);
-	
-	
 end entity AXI;
 
 architecture ckt of AXI is

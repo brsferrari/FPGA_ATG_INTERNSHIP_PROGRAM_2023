@@ -3,25 +3,34 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 use IEEE.numeric_std.all;
 
+--atribui um endereco a uma porta
+
+--indicar se o endereco esta em alguma porta -> out -> porta e seu respectivo endereco
 entity tabela_dinamica is
 	port(
-		signal clk			   			: in std_logic;
-		signal rst			   			: in std_logic;
-		signal DATA							: in std_logic_vector(7 downto 0);
-		signal SRC_ADDR					: in std_logic_vector(7 downto 0);
-		signal DEST_ADDR					: out std_logic_vector(7 downto 0);
+		signal clk			   				: in std_logic;
+		signal rst			   				: in std_logic;
+		signal SRC_ADDR						: in std_logic_vector(15 downto 0);
+		signal PORTA						: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
+		signal ERRO						: in std_logic_vector(5 downto 0);
+		signal ADDRESS_TABLE 				: out std_logic_vector(79 downto 0);
 		signal FLAGS						: in std_logic_vector(7 downto 0)
 		);
 end entity tabela_dinamica;
 
 architecture hardware of tabela_dinamica is
-type dynamic_table is array(4 downto 0) of std_logic_vector(7 downto 0);
+type dynamic_table is array(4 downto 0) of std_logic_vector(15 downto 0);
 
 signal table 	: dynamic_table;
-signal addr 	: std_logic_vector(7 downto 0);
-signal position : integer;
+signal addr 	: std_logic_vector(15 downto 0);
+signal port_i 	: std_logic_vector(4 downto 0);
+signal ADDRESS_TABLE_i : std_logic_vector(79 downto 0) := (others => '0');
 
 begin
+
+	addr <= SRC_ADDR;
+	port_i <= PORTA;
+	ADDRESS_TABLE <= ADDRESS_TABLE_i;
 
 	TICK : process(clk, rst) is
 	begin
@@ -29,32 +38,44 @@ begin
 			if rst = '1' then
 				addr <= (others => '0');
 			else
-				addr <= SRC_ADDR;
-				
-				--sync e close analisar o endereco de origem e verificar onde o endereco de destino foi gravado para entao apagar
-				if FLAGS(7) = '1' then --houve sync
-					sync1 : for i in 0 to 4 loop
-						if(table(i) = X"00") then
-							table(i) <= addr;
-						end if;
+				--ADDRESS_TABLE <=
+				read_table : for i in 0 to 4 loop
+					case i is
+						when 0 =>
+							ADDRESS_TABLE_i(15 downto 0) <= table(0);
+						
+						when 1 =>
+							ADDRESS_TABLE_i(31 downto 16) <= table(1);
 					
-					end loop sync1;
-	
-				elsif FLAGS(0) = '1' then --houve close
-					sync2 : for i in 0 to 4 loop
-						if(table(i) /= X"00") then
-							table(i) <= (others => '0');
-						end if;
-					end loop sync2;					
-				else  --varredura para verificar se o endereco existe em uma das portas.
-					sending : for i in 0 to 4 loop
-						if(table(i) = SRC_ADDR) then
-							DEST_ADDR <= DATA;
-						end if;
-					end loop sending;	
+						when 2 =>
+							ADDRESS_TABLE_i(47 downto 32) <= table(2);
+					
+						when 3 =>
+							ADDRESS_TABLE_i(63 downto 48) <= table(3);
+				
+						when 4 =>
+							ADDRESS_TABLE_i(79 downto 64) <= table(4);
+					end case;
+				end loop read_table;
+
+				if ERRO = "000000" then	--nao houve erro
+					--sync e close analisar o endereco de origem e verificar onde o endereco de destino foi gravado para entao apagar
+					if FLAGS(7) = '1' then --houve sync
+						sync1 : for i in 0 to 4 loop
+							if(port_i(i) = '1') then --eh a porta selecionada
+								table(i) <= SRC_ADDR;  --linha onde ira o endereco
+							end if;
+						end loop sync1;
+		
+					elsif FLAGS(0) = '1' then --houve close
+						sync2 : for i in 0 to 4 loop
+							if(port_i(i) = '1') then --eh a porta selecionada
+								table(i) <= (others => '0');
+							end if;
+						end loop sync2;		
+					end if;			
 				end if;
-			end if;
+			end if;				
 		end if;
 	end process;
-
 end architecture hardware;
