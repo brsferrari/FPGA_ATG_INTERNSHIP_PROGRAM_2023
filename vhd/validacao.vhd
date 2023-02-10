@@ -8,6 +8,7 @@ entity validacao is
 		signal clk			   			: in std_logic;
 		signal rst			   			: in std_logic;
 		signal sync						: out std_logic;
+		signal validate_finish		: out std_logic;
 	--Slave
 		signal S_AXIS_TDATA  			: in std_logic_vector (7 downto 0);
 		signal S_AXIS_TVALID 			: in std_logic;
@@ -26,7 +27,7 @@ entity validacao is
 		signal sequence_num  			: in std_logic_vector(31 downto 0);
 		signal dummy		    		: in std_logic_vector(15 downto 0);
 		signal prot    					: in std_logic_vector(7 downto 0);
-		signal error					: out std_logic_vector(4 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
+		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
 	);
 end entity validacao;
 
@@ -60,7 +61,7 @@ architecture ckt of validacao is
 	signal dummy_rx_unsign			   	: unsigned(15 downto 0);
 	signal sequence_number_rx_usign		: unsigned(31 downto 0);
 
-	signal synchronize					: std_logic;	--signal de sincronismo
+	signal synchronize					: std_logic := '1';	--signal de sincronismo
 	signal transmission 					: std_logic := '1';
 	
 	signal contador_len_payload : unsigned (7 downto 0) := (others => '0');
@@ -115,6 +116,7 @@ architecture ckt of validacao is
 				else
 					if valid = '1' then --vai ser alterado pelo master
 						if transmission = '1' then	--vai ser alterado pelo master
+							validate_finish <= '0';
 							synchronize <= '1';
 							case estado is
 						
@@ -286,12 +288,13 @@ architecture ckt of validacao is
 								
 								when "011" =>	--faco o checksum
 									if increment_pckt_len /= packet_len_rx_unsign then
-										error <= "00001"; 
+										error <= "000001"; 
 									elsif checksum /= checksum_rx_unsign then
-										error <= "00010";
+										error <= "000010";
 									elsif ideal_seq_num /= sequence_number_rx_usign then
-										error <= "00100";
+										error <= "000100";
 									end if;
+									validate_finish <= '1';
 									
 									if Flags(0) = '1' then
 									--close ativado zera o enereco atribuido a porta

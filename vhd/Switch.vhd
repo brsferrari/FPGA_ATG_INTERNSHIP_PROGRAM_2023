@@ -18,7 +18,16 @@ entity SWITCH is
 		signal Schecksum_out				: out unsigned (15 downto 0);	--dado para simulacao
 		signal Sestado	: out unsigned (3 downto 0);
 		signal Checksum_reg_out						: out std_logic_vector(15 downto 0);
-
+		signal Packet_length				: out std_logic_vector(15 downto 0);
+		
+		signal PORTA							: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
+		signal PORTA_dest						: out std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
+		signal Source_Address  				: out std_logic_vector(15 downto 0);
+		signal valid_error_out 				:  out std_logic_vector(5 downto 0);
+		signal ADDRESS_TABLE_out				: out std_logic_vector(79 downto 0);
+		signal Flags_reg_out    			:  out std_logic_vector(7 downto 0) := (others => '0'); --MSB -> Sync, LSB -> Close
+	
+		signal DEST_ADDR_out						: out std_logic_vector(15 downto 0);
 
 	--Slave
 		signal S_AXIS_TDATA  				: in  std_logic_vector (7 downto 0); --envio de dados
@@ -38,15 +47,21 @@ architecture ckt of SWITCH is
 	signal Src_Addr_reg  					:  std_logic_vector(15 downto 0);
 	signal Dummy_reg				   		:  std_logic_vector(15 downto 0);	--sera sempre 0x0000
 	signal Protocol_reg 					:  std_logic_vector(7 downto 0);  --sera sempre 0x18
-	signal Flags_reg    					:  std_logic_vector(7 downto 0); --MSB -> Sync, LSB -> Close
+	signal Flags_reg    					:  std_logic_vector(7 downto 0) := (others => '0'); --MSB -> Sync, LSB -> Close
 	signal Seq_num_reg  					:  std_logic_vector(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
 	signal Checksum_reg						: std_logic_vector(15 downto 0);
 	signal Packet_len_reg					: std_logic_vector(15 downto 0);
 	signal Seq_num_reg_out  					:  unsigned(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
 	signal Spayload_i						:  std_logic_vector(7 downto 0);
 		
-	signal valid_error 						: std_logic_vector(4 downto 0);
+	signal valid_error 						: std_logic_vector(5 downto 0);
+	signal valid_error_i						: std_logic_vector(5 downto 0);
 	
+	signal validate_finish : std_logic;
+	signal ADDRESS_TABLE_i				: std_logic_vector(79 downto 0);
+
+	signal PORTA_dest_i : std_logic_vector (4 downto 0);
+
 	component AXI is
 		port(
 		signal clk			   				: in std_logic;
@@ -74,6 +89,8 @@ architecture ckt of SWITCH is
 		port(
 		signal clk			   			: in std_logic;
 		signal rst			   			: in std_logic;
+		signal validate_finish				: out std_logic;
+
 		signal sync						: out std_logic;
 	--Slave
 		signal S_AXIS_TDATA  			: in std_logic_vector (7 downto 0);
@@ -93,9 +110,35 @@ architecture ckt of SWITCH is
 		signal sequence_num  			: in std_logic_vector(31 downto 0);
 		signal dummy		    		: in std_logic_vector(15 downto 0);
 		signal prot    					: in std_logic_vector(7 downto 0);
-		signal error					: out std_logic_vector(4 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
+		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
 	);
 	end component validacao;
+	
+	component tabela_dinamica is
+	port(
+		signal clk			   				: in std_logic;
+		signal rst			   				: in std_logic;
+		signal validate_finish				: in std_logic;
+		signal SRC_ADDR						: in std_logic_vector(15 downto 0);
+		signal PORTA							: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
+		signal ERRO							  	: in std_logic_vector(5 downto 0);
+		signal ADDRESS_TABLE 				: out std_logic_vector(79 downto 0);
+		signal FLAGS							: in std_logic_vector(7 downto 0)
+		);
+	end component tabela_dinamica;
+	
+	component identificador_de_porta is
+		port(
+			signal clk			   				: in std_logic;
+			signal rst			   				: in std_logic;
+			signal validate_finish				: in std_logic;
+			signal ERRO  							: out std_logic_vector(5 downto 0);
+			signal ADDRESS_TABLE 				: in std_logic_vector(79 downto 0);
+			signal DEST_ADDR						: in std_logic_vector(15 downto 0);
+			signal FLAGS							: in std_logic_vector(7 downto 0);
+			signal DEST_PORT                 : out std_logic_vector(4 downto 0)
+		);
+	end component identificador_de_porta;
 	
 	begin
 		
@@ -107,6 +150,16 @@ architecture ckt of SWITCH is
 		data <= S_AXIS_TDATA;
 		valid <= '1';
 		Checksum_reg_out <= checksum_reg;
+		Packet_length <= Packet_len_reg;
+		Source_Address <= Src_Addr_reg;
+		valid_error_out <= valid_error_i when valid_error = "00000" else
+								 valid_error;
+		valid_error_i <= valid_error;
+		Flags_reg_out <= flags_reg;
+		DEST_ADDR_out <= dest_Addr_reg;
+		PORTA_dest <= PORTA_dest_i;
+		ADDRESS_TABLE_out <= ADDRESS_TABLE_i;
+		
 --		AXI4_Stream_master : Process(clk)
 --				
 --			begin
@@ -125,9 +178,10 @@ architecture ckt of SWITCH is
 	header_reader :  AXI port map(clk, rst, data, valid, sync,
 	Dest_Addr_reg, Src_Addr_reg, Dummy_reg, Protocol_reg, Flags_reg, Seq_num_reg, checksum_reg, Packet_len_reg);
 	
-	check_data_integrety : validacao port map (clk, rst, sync, data, valid, ready, S_AXIS_TLAST, Spayload_i,
+	check_data_integrety : validacao port map (clk, rst, validate_finish, sync, data, valid, ready, S_AXIS_TLAST, Spayload_i,
 	Ssoma, Seq_num_reg_out, Sdata, Sestado, Flags_reg, checksum_reg, Schecksum_out, Packet_len_reg, pckt_len,
 	Seq_num_reg, Dummy_reg, Protocol_reg, valid_error);
 	
-	
+	montagem_tabela : tabela_dinamica port map(clk, rst, validate_finish, Src_Addr_reg, PORTA, valid_error , ADDRESS_TABLE_i, Flags_reg);
+	enviando_para_porta_de_destino : identificador_de_porta port map(clk, rst, validate_finish, valid_error_i, ADDRESS_TABLE_i, Dest_Addr_reg, Flags_reg, PORTA_dest_i);
 end architecture;

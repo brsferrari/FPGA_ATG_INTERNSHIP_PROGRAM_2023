@@ -1,7 +1,6 @@
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
-use IEEE.numeric_std.all;
 
 --atribui um endereco a uma porta
 
@@ -10,6 +9,7 @@ entity tabela_dinamica is
 	port(
 		signal clk			   				: in std_logic;
 		signal rst			   				: in std_logic;
+		signal validate_finish				: in std_logic;
 		signal SRC_ADDR						: in std_logic_vector(15 downto 0);
 		signal PORTA						: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
 		signal ERRO						: in std_logic_vector(5 downto 0);
@@ -25,13 +25,15 @@ signal table 	: dynamic_table;
 signal addr 	: std_logic_vector(15 downto 0);
 signal port_i 	: std_logic_vector(4 downto 0);
 signal ADDRESS_TABLE_i : std_logic_vector(79 downto 0) := (others => '0');
+signal flag_i : std_logic_vector (7 downto 0) := (others => '0');
 
 begin
 
 	addr <= SRC_ADDR;
 	port_i <= PORTA;
 	ADDRESS_TABLE <= ADDRESS_TABLE_i;
-
+	flag_i <= FLAGS;
+	
 	TICK : process(clk, rst) is
 	begin
 		if rising_edge(clk) then
@@ -58,21 +60,23 @@ begin
 					end case;
 				end loop read_table;
 
-				if ERRO = "000000" then	--nao houve erro
-					--sync e close analisar o endereco de origem e verificar onde o endereco de destino foi gravado para entao apagar
-					if FLAGS(7) = '1' then --houve sync
-						sync1 : for i in 0 to 4 loop
-							if(port_i(i) = '1') then --eh a porta selecionada
-								table(i) <= SRC_ADDR;  --linha onde ira o endereco
-							end if;
-						end loop sync1;
-		
-					elsif FLAGS(0) = '1' then --houve close
-						sync2 : for i in 0 to 4 loop
-							if(port_i(i) = '1') then --eh a porta selecionada
-								table(i) <= (others => '0');
-							end if;
-						end loop sync2;		
+				if  validate_finish = '1' then	--nao houve erro
+					if  ERRO = "000000" then
+							--sync e close analisar o endereco de origem e verificar onde o endereco de destino foi gravado para entao apagar
+						if flag_i(7) = '1' then --houve sync
+							sync1 : for i in 0 to 4 loop
+								if(port_i(i) = '1') then --eh a porta selecionada
+									table(i) <= SRC_ADDR;  --linha onde ira o endereco
+								end if;
+							end loop sync1;
+			
+						elsif flag_i(0) = '1' then --houve close
+							sync2 : for i in 0 to 4 loop
+								if(port_i(i) = '1') then --eh a porta selecionada
+									table(i) <= (others => '0');
+								end if;
+							end loop sync2;		
+						end if;
 					end if;			
 				end if;
 			end if;				

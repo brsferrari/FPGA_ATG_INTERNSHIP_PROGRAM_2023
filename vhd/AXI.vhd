@@ -53,7 +53,7 @@ architecture ckt of AXI is
 					Packet_length <= (others => '0');
 				
 				else
-					if valid = '1' then	--o dado eh valido
+					if valid = '1' then	--o dado eh valido	
 						if sync = '1' then	--signal de sincronismo entre o componente validacao e o header
 						--Caso a validacao esteja ainda sendo feita esta maquina de estado nao pode ocorrer para nao receber dados novos
 							case estado is
@@ -118,9 +118,8 @@ architecture ckt of AXI is
 									estado <= estado + 1;
 									
 								when "1111" =>
-									Destination_Address(7 downto 0) <= data;
-									estado <= "0000";
-
+										Destination_Address(7 downto 0) <= data;
+										estado <= "0000";
 								when others =>
 									estado <= "0000";
 							end case;
