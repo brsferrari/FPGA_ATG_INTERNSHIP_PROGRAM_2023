@@ -14,6 +14,7 @@ entity validacao is
 		signal S_AXIS_TVALID 			: in std_logic;
 		signal S_AXIS_TREADY 			: out std_logic;
 		signal S_AXIS_TLAST  			: in std_logic;
+		signal M_AXIS_TREADY		: in std_logic;
 		signal Spayload						:  out std_logic_vector(7 downto 0);
 		signal Ssoma							:  out unsigned (16 downto 0);
 		signal ideal_seq_num_out				: out unsigned (31 downto 0);
@@ -40,7 +41,7 @@ architecture ckt of validacao is
 	signal data							: unsigned (15 downto 0);
 	signal soma							: unsigned (16 downto 0);
 	signal increment_pckt_len			: unsigned (15 downto 0) := (others => '0');
-	signal valid, last, ready			: std_logic;
+	signal valid, last, ready, master_ready			: std_logic;
 	signal checksum				  	 	: unsigned (15 downto 0);	--checksum calculado pelo componente
 	signal ideal_dummy				    : unsigned (15 downto 0) := X"0000"; --dummy ideal
 	signal ideal_protocol				: unsigned (7 downto 0)  := X"18";	--protocol ideal
@@ -98,6 +99,9 @@ architecture ckt of validacao is
 		Ssoma <= soma;
 		ideal_seq_num_out <= ideal_seq_num;
 		
+		
+		master_ready <= M_AXIS_TREADY;
+		
 		Validacao : Process(clk, rst)
 			
 			begin
@@ -114,7 +118,7 @@ architecture ckt of validacao is
 					soma 						<= (others => '0');
 					ideal_seq_num 			<= (others => '0');
 				else
-					if valid = '1' then --vai ser alterado pelo master
+					if valid = '1' and master_ready = '1' then --vai ser alterado pelo master
 						if transmission = '1' then	--vai ser alterado pelo master
 							validate_finish <= '0';
 							synchronize <= '1';
@@ -291,16 +295,14 @@ architecture ckt of validacao is
 										error <= "000001"; 
 									elsif checksum /= checksum_rx_unsign then
 										error <= "000010";
-									elsif ideal_seq_num /= sequence_number_rx_usign then
+									elsif ideal_seq_num /= sequence_number_rx_usign and (FLAGS = "00000000") then
 										error <= "000100";
+									elsif FLAGS(7) = '1' then
+										error <= "100000";
+									elsif FLAGS(0) = '1' then
+										error <= "010000";
 									end if;
 									validate_finish <= '1';
-									
-									if Flags(0) = '1' then
-									--close ativado zera o enereco atribuido a porta
-									elsif Flags(7) = '1' then
-									end if;
-									--sync ativado atribui o endereco de origem a porta
 									ready <= '1';
 									synchronize <= '0';	--nao habilito o header para receber o payload
 									soma <= (others => '0');

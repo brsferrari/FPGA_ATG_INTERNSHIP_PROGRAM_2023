@@ -11,10 +11,11 @@ entity tabela_dinamica is
 		signal rst			   				: in std_logic;
 		signal validate_finish				: in std_logic;
 		signal SRC_ADDR						: in std_logic_vector(15 downto 0);
-		signal PORTA						: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
-		signal ERRO						: in std_logic_vector(5 downto 0);
+		signal SRC_ADDR_out					: out std_logic_vector(15 downto 0);
+		signal PORTA							: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
+		signal ERRO_da_validacao 			: in std_logic_vector(5 downto 0);
 		signal ADDRESS_TABLE 				: out std_logic_vector(79 downto 0);
-		signal FLAGS						: in std_logic_vector(7 downto 0)
+		signal FLAGS							: in std_logic_vector(7 downto 0)
 		);
 end entity tabela_dinamica;
 
@@ -60,8 +61,8 @@ begin
 					end case;
 				end loop read_table;
 
-				if  validate_finish = '1' then	--nao houve erro
-					if  ERRO = "000000" then
+				if  validate_finish = '1' then	--terminou a validacao
+					if  ERRO_da_validacao = "100000" or ERRO_da_validacao = "010000" then		--nao houve erro
 							--sync e close analisar o endereco de origem e verificar onde o endereco de destino foi gravado para entao apagar
 						if flag_i(7) = '1' then --houve sync
 							sync1 : for i in 0 to 4 loop
@@ -77,7 +78,8 @@ begin
 								end if;
 							end loop sync2;		
 						end if;
-					end if;			
+					end if;	
+					SRC_ADDR_out <= SRC_ADDR;
 				end if;
 			end if;				
 		end if;

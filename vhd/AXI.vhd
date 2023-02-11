@@ -9,6 +9,7 @@ entity AXI is
 	--Slave
 		signal S_AXIS_TDATA  	: in std_logic_vector (7 downto 0);
 		signal S_AXIS_TVALID 	: in std_logic;
+		signal M_AXIS_TREADY		: in std_logic;
 		
 		signal sync	: in std_logic; 
 
@@ -35,6 +36,7 @@ architecture ckt of AXI is
 	
 		valid <= S_AXIS_TVALID;
 		data <= S_AXIS_TDATA;
+		ready <= M_AXIS_TREADY;
 		
 		AXI4_Stream : Process(clk)
 				
@@ -53,7 +55,7 @@ architecture ckt of AXI is
 					Packet_length <= (others => '0');
 				
 				else
-					if valid = '1' then	--o dado eh valido	
+					if valid = '1' and ready = '1' then	--o dado eh valido	
 						if sync = '1' then	--signal de sincronismo entre o componente validacao e o header
 						--Caso a validacao esteja ainda sendo feita esta maquina de estado nao pode ocorrer para nao receber dados novos
 							case estado is

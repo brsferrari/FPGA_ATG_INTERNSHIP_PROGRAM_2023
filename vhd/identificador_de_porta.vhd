@@ -8,11 +8,11 @@ entity identificador_de_porta is
 		signal clk			   				: in std_logic;
 		signal rst			   				: in std_logic;
 		signal validate_finish				: in std_logic;
-		signal ERRO  							: out std_logic_vector(5 downto 0);
+		signal ERRO  						: out std_logic_vector(5 downto 0);
 		signal ADDRESS_TABLE 				: in std_logic_vector(79 downto 0);
-		signal DEST_ADDR						: in std_logic_vector(15 downto 0);
-		signal FLAGS							: in std_logic_vector(7 downto 0);
-		signal DEST_PORT                 : out std_logic_vector(4 downto 0)
+		signal DEST_ADDR					: in std_logic_vector(15 downto 0);
+		signal FLAGS						: in std_logic_vector(7 downto 0);
+		signal DEST_PORT                 	: out std_logic_vector(4 downto 0)
 	);
 end entity identificador_de_porta;
 
@@ -46,6 +46,9 @@ begin
 
                     elsif ADDRESS_TABLE(79 downto 64) = DEST_ADDR then
                         DEST_PORT <= "10000";
+					
+					else --endereco nao reconhecido
+						ERRO <= "001000";
                     end if;
                 end if;
 				end if;
