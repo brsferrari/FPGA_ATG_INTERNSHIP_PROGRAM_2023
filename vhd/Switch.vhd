@@ -52,6 +52,7 @@ architecture ckt of SWITCH is
 	signal Checksum_reg						: std_logic_vector(15 downto 0);
 	signal Packet_len_reg					: std_logic_vector(15 downto 0);
 	signal Seq_num_reg_out  					:  unsigned(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
+	signal Seq_num_out					: unsigned (31 downto 0);
 	signal Spayload_i						:  std_logic_vector(7 downto 0);
 		
 	signal valid_error 						: std_logic_vector(5 downto 0);
@@ -71,6 +72,7 @@ architecture ckt of SWITCH is
 	signal pckt_len_i : unsigned (15 downto 0);
 	signal checksum_esperado : unsigned(15 downto 0);
 	signal master_T_LAST : std_logic := '0';
+	signal FLAG_de_seqnum				: std_logic_vector(5 downto 0);
 	
 	component AXI is
 		port(
@@ -79,7 +81,7 @@ architecture ckt of SWITCH is
 	--Slave
 		signal S_AXIS_TDATA  				: in std_logic_vector (7 downto 0);
 		signal S_AXIS_TVALID 				: in std_logic;
-		signal M_AXIS_TREADY		: in std_logic;
+		--signal M_AXIS_TREADY		: in std_logic;
 
 		signal sync							: in std_logic; 
 
@@ -109,10 +111,8 @@ architecture ckt of SWITCH is
 		signal S_AXIS_TVALID 			: in std_logic;
 		signal S_AXIS_TREADY 			: out std_logic;
 		signal S_AXIS_TLAST  			: in std_logic;
-		
 		signal Spayload						:  out std_logic_vector(7 downto 0);
 		signal Ssoma							:  out unsigned (16 downto 0);
-		signal ideal_seq_num_out				: out unsigned (31 downto 0);
 		signal Sdata	: out unsigned (15 downto 0);
 		signal Sestado	: out unsigned (3 downto 0);
 		signal Flags    					: in std_logic_vector(7 downto 0); 	--MSB -> Sync, LSB -> Close
@@ -120,18 +120,23 @@ architecture ckt of SWITCH is
 		signal Schecksum_out			: out unsigned (15 downto 0);	--para simulacao
 		signal pckt_len					: in std_logic_vector (15 downto 0);
 		signal pckt_len_out     		: out unsigned (15 downto 0);		--para simulacao
-		signal sequence_num  			: in std_logic_vector(31 downto 0);
 		signal dummy		    		: in std_logic_vector(15 downto 0);
 		signal prot    					: in std_logic_vector(7 downto 0);
 		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
 	);
 	end component validacao;
 	
+
+	
 	component tabela_dinamica is
 	port(
 		signal clk			   				: in std_logic;
 		signal rst			   				: in std_logic;
 		signal validate_finish				: in std_logic;
+		signal tlast							: in std_logic;
+		signal seqnum							: in unsigned (31 downto 0); --header
+		signal seqnum_component				: out unsigned (31 downto 0); 
+		signal FLAG_de_seqnum				: out std_logic_vector(5 downto 0);
 		signal SRC_ADDR						: in std_logic_vector(15 downto 0);
 		signal SRC_ADDR_out					: out std_logic_vector(15 downto 0);
 		signal PORTA							: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
@@ -141,11 +146,14 @@ architecture ckt of SWITCH is
 		);
 	end component tabela_dinamica;
 	
+	
+	
 	component identificador_de_porta is
 		port(
 			signal clk			   				: in std_logic;
 			signal rst			   				: in std_logic;
 			signal validate_finish				: in std_logic;
+			signal entrada_de_erro				: in std_logic_vector(5 downto 0);
 			signal ERRO  							: out std_logic_vector(5 downto 0);
 			signal ADDRESS_TABLE 				: in std_logic_vector(79 downto 0);
 			signal DEST_ADDR						: in std_logic_vector(15 downto 0);
@@ -157,18 +165,12 @@ architecture ckt of SWITCH is
 	begin
 		
 		S_AXIS_TREADY <= ready;
-		--M_AXIS_TDATA  <= m_data;
-		--M_AXIS_TVALID <= valid;
-		--M_AXIS_TLAST  <= m_last;
 		
 		valid <= S_AXIS_TVALID;
 		
-		data <= S_AXIS_TDATA;
 		Checksum_reg_out <= checksum_reg;
 		Packet_length <= Packet_len_reg;
-		valid_error_out <= valid_error_i when valid_error = "00000" else
-								 valid_error;
-		valid_error_i <= valid_error;
+		valid_error_out <= valid_error_i;
 		Flags_reg_out <= flags_reg;
 		DEST_ADDR_out <= dest_Addr_reg;
 		PORTA_dest <= PORTA_dest_i;
@@ -178,7 +180,6 @@ architecture ckt of SWITCH is
 		pckt_len <= pckt_len_i;
 		Schecksum_out <= checksum_esperado;
 		
-		
 		AXI4_Stream_master : Process(clk)
 				
 			begin
@@ -186,6 +187,8 @@ architecture ckt of SWITCH is
 				if rst = '1' then
 					
 				else
+					data <= S_AXIS_TDATA;
+					
 					if valid_error(3 downto 0) /= "0000" then --houve erro
 						M_AXIS_TVALID <= '1'; 
 					else 
@@ -215,8 +218,8 @@ architecture ckt of SWITCH is
 				if rst = '1' then
 					
 				else
-					if valid_error(3 downto 0) /= "0000" then --houve erro
-						if valid_error(3 downto 0) = "0001" then --erro de pckt_len
+					if valid_error_i(3 downto 0) /= "0000" and M_AXIS_TREADY = '1' then --houve erro
+						if valid_error_i(0) = '1' then --erro de pckt_len
 							if master_T_LAST = '0' then
 								case estado_pckt_len is
 									when X"0" =>
@@ -242,7 +245,7 @@ architecture ckt of SWITCH is
 							end if;
 							
 							
-						elsif valid_error(3 downto 0) = "0010" then --erro de checksum
+						elsif valid_error_i(1) = '1' then --erro de checksum
 							if master_T_LAST = '0' then
 								case estado_checksum is
 									when X"0" =>
@@ -268,7 +271,7 @@ architecture ckt of SWITCH is
 							end if;
 							
 								
-						elsif valid_error(3 downto 0) = "0100" then --erro de seq_num_reg
+						elsif valid_error_i(2) = '1' then --erro de seq_num_reg
 							if master_T_LAST = '0' then
 								case estado_seq_num is
 									when X"00" =>
@@ -309,7 +312,7 @@ architecture ckt of SWITCH is
 								end case;
 							end if;
 							
-						elsif	valid_error(3 downto 0) = "1000" then	--erro de endereco nao encontrado
+						elsif	valid_error_i(3) = '1' then	--erro de endereco nao encontrado
 							if master_T_LAST = '0' then
 								case estado_nt_found_addr is
 									when '0' =>
@@ -329,15 +332,18 @@ architecture ckt of SWITCH is
 					end if;					  
 				end if;
 			end if;
-		end process;
+		end process;	
 		
-	header_reader :  AXI port map(clk, rst, data, valid, M_AXIS_TREADY, sync,
+	header_reader :  AXI port map(clk, rst, data, valid, sync,
 	Dest_Addr_reg, Src_Addr_reg, Dummy_reg, Protocol_reg, Flags_reg, Seq_num_reg, checksum_reg, Packet_len_reg);
 	
+	montagem_tabela : tabela_dinamica port map(clk, rst, validate_finish, S_AXIS_TLAST, unsigned(seq_num_reg), 
+	Seq_num_out, FLAG_de_seqnum, Src_Addr_reg, Source_addres_valid, PORTA, valid_error , ADDRESS_TABLE_i, Flags_reg);
+
 	check_data_integrety : validacao port map (clk, rst, validate_finish, sync, M_AXIS_TREADY, data, valid, ready, S_AXIS_TLAST, Spayload_i,
-	Ssoma, Seq_num_reg_out, Sdata, Sestado, Flags_reg, checksum_reg, checksum_esperado, Packet_len_reg, pckt_len_i,
-	Seq_num_reg, Dummy_reg, Protocol_reg, valid_error);
+	Ssoma, Sdata, Sestado, Flags_reg, checksum_reg, checksum_esperado, Packet_len_reg, pckt_len_i,
+	Dummy_reg, Protocol_reg, valid_error);
 	
-	montagem_tabela : tabela_dinamica port map(clk, rst, validate_finish, Src_Addr_reg, Source_addres_valid, PORTA, valid_error , ADDRESS_TABLE_i, Flags_reg);
-	enviando_para_porta_de_destino : identificador_de_porta port map(clk, rst, validate_finish, valid_error_i, ADDRESS_TABLE_i, Dest_Addr_reg, Flags_reg, PORTA_dest_i);
+	enviando_para_porta_de_destino : identificador_de_porta port map(clk, rst, validate_finish, FLAG_de_seqnum, valid_error_i, ADDRESS_TABLE_i, Dest_Addr_reg, Flags_reg, PORTA_dest_i);
+
 end architecture;

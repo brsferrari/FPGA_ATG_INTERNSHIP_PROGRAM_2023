@@ -8,6 +8,7 @@ entity identificador_de_porta is
 		signal clk			   				: in std_logic;
 		signal rst			   				: in std_logic;
 		signal validate_finish				: in std_logic;
+		signal entrada_de_erro				: in std_logic_vector(5 downto 0);
 		signal ERRO  						: out std_logic_vector(5 downto 0);
 		signal ADDRESS_TABLE 				: in std_logic_vector(79 downto 0);
 		signal DEST_ADDR					: in std_logic_vector(15 downto 0);
@@ -19,17 +20,20 @@ end entity identificador_de_porta;
 architecture hardware of identificador_de_porta is
 
 signal ADDRESS_TABLE_i : std_logic_vector(79 downto 0) := (others => '0');
-
+signal erro_i : std_logic_vector(5 downto 0);
 
 begin
 	ADDRESS_TABLE_i <= ADDRESS_TABLE;
-	
+	ERRO <= erro_i;
+
 	TICK : process(clk, rst) is
 	begin
 		if rising_edge(clk) then
 			if rst = '1' then
 				
 			else
+				erro_i <= entrada_de_erro;
+
 				if validate_finish = '1' then
                 if FLAGS = X"00" then
                     if ADDRESS_TABLE(15 downto 0) 		= DEST_ADDR then
@@ -48,7 +52,7 @@ begin
                         DEST_PORT <= "10000";
 					
 					else --endereco nao reconhecido
-						ERRO <= "001000";
+						erro_i(3) <= '1';
                     end if;
                 end if;
 				end if;

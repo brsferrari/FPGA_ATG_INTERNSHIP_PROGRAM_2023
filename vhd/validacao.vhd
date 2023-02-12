@@ -7,17 +7,17 @@ entity validacao is
 	port(
 		signal clk			   			: in std_logic;
 		signal rst			   			: in std_logic;
-		signal sync						: out std_logic;
-		signal validate_finish		: out std_logic;
+		signal validate_finish				: out std_logic;
+		signal sync							: out std_logic;
+		signal M_AXIS_TREADY				: in std_logic;
+
 	--Slave
 		signal S_AXIS_TDATA  			: in std_logic_vector (7 downto 0);
 		signal S_AXIS_TVALID 			: in std_logic;
 		signal S_AXIS_TREADY 			: out std_logic;
 		signal S_AXIS_TLAST  			: in std_logic;
-		signal M_AXIS_TREADY		: in std_logic;
 		signal Spayload						:  out std_logic_vector(7 downto 0);
 		signal Ssoma							:  out unsigned (16 downto 0);
-		signal ideal_seq_num_out				: out unsigned (31 downto 0);
 		signal Sdata	: out unsigned (15 downto 0);
 		signal Sestado	: out unsigned (3 downto 0);
 		signal Flags    					: in std_logic_vector(7 downto 0); 	--MSB -> Sync, LSB -> Close
@@ -25,7 +25,6 @@ entity validacao is
 		signal Schecksum_out			: out unsigned (15 downto 0);	--para simulacao
 		signal pckt_len					: in std_logic_vector (15 downto 0);
 		signal pckt_len_out     		: out unsigned (15 downto 0);		--para simulacao
-		signal sequence_num  			: in std_logic_vector(31 downto 0);
 		signal dummy		    		: in std_logic_vector(15 downto 0);
 		signal prot    					: in std_logic_vector(7 downto 0);
 		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
@@ -45,22 +44,18 @@ architecture ckt of validacao is
 	signal checksum				  	 	: unsigned (15 downto 0);	--checksum calculado pelo componente
 	signal ideal_dummy				    : unsigned (15 downto 0) := X"0000"; --dummy ideal
 	signal ideal_protocol				: unsigned (7 downto 0)  := X"18";	--protocol ideal
-	signal ideal_seq_num				: unsigned (31 downto 0);
-	signal first_receive				: std_logic := '0';
 
 	--signals para receber do header a informcao
 	signal checksum_rx					: std_logic_vector(15 downto 0);
 	signal packet_len_rx				: std_logic_vector(15 downto 0);
 	signal prot_rx 						: std_logic_vector(7 downto 0);
 	signal dummy_rx				   		: std_logic_vector(15 downto 0);
-	signal sequence_number_rx  			: std_logic_vector(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
 	
 	--signals para trabalhar com operacao de comparacao para verificar a integridade da informacao
 	signal checksum_rx_unsign			: unsigned(15 downto 0);
 	signal packet_len_rx_unsign			: unsigned(15 downto 0);
 	signal prot_rx_unsign				: unsigned(7 downto 0);
 	signal dummy_rx_unsign			   	: unsigned(15 downto 0);
-	signal sequence_number_rx_usign		: unsigned(31 downto 0);
 
 	signal synchronize					: std_logic := '1';	--signal de sincronismo
 	signal transmission 					: std_logic := '1';
@@ -80,14 +75,12 @@ architecture ckt of validacao is
 		packet_len_rx <= pckt_len;	--pckt_len do header
 		prot_rx <= prot;			--protocol do header
 		dummy_rx <= dummy;			--dummy do header
-		sequence_number_rx <= sequence_num;
 		Sdata <= data;
 		--Conversao para sinais unsigned
 		checksum_rx_unsign <= unsigned(checksum_rx);
 		packet_len_rx_unsign <= unsigned(packet_len_rx);
 		prot_rx_unsign <= unsigned(prot_rx);
 		dummy_rx_unsign <= unsigned(dummy_rx);
-		sequence_number_rx_usign <=  unsigned(sequence_number_rx);
 		Sestado <= estado;
 		------------------------------------------
 
@@ -97,7 +90,6 @@ architecture ckt of validacao is
 		Schecksum_out <= checksum;
 		Spayload <= payload;
 		Ssoma <= soma;
-		ideal_seq_num_out <= ideal_seq_num;
 		
 		
 		master_ready <= M_AXIS_TREADY;
@@ -116,7 +108,6 @@ architecture ckt of validacao is
 					checksum 				<= (others => '0');
 					payload 					<= (others => '0');
 					soma 						<= (others => '0');
-					ideal_seq_num 			<= (others => '0');
 				else
 					if valid = '1' and master_ready = '1' then --vai ser alterado pelo master
 						if transmission = '1' then	--vai ser alterado pelo master
@@ -196,16 +187,10 @@ architecture ckt of validacao is
 									increment_pckt_len <= increment_pckt_len + 1;
 									soma <= soma + data;
 									ready <= '1';
-									if first_receive = '0' then
-										ideal_seq_num <= sequence_number_rx_usign;
-									else
-										ideal_seq_num <= ideal_seq_num + 1;	
-									end if;
 									estado <= estado + 1;
 							
 								when "1001" =>
 									data(7 downto 0) <= unsigned(transmit_data);
-									first_receive <= '1';
 									if soma(16) = '1' then
 										soma <= soma + 1;
 										soma(16) <= '0';
@@ -292,15 +277,27 @@ architecture ckt of validacao is
 								
 								when "011" =>	--faco o checksum
 									if increment_pckt_len /= packet_len_rx_unsign then
-										error <= "000001"; 
-									elsif checksum /= checksum_rx_unsign then
-										error <= "000010";
-									elsif ideal_seq_num /= sequence_number_rx_usign and (FLAGS = "00000000") then
-										error <= "000100";
-									elsif FLAGS(7) = '1' then
-										error <= "100000";
-									elsif FLAGS(0) = '1' then
-										error <= "010000";
+										error(0) <= '1'; 
+									else
+										error(0) <= '0'; 
+									end if;
+									
+									if checksum /= checksum_rx_unsign then
+										error(1) <= '1';
+									else
+										error(1) <= '0'; 
+									end if;
+									
+									if FLAGS(7) = '1' then	--sync
+										error(5) <= '1';
+									else
+										error(5) <= '0'; 
+									end if;
+									
+									if FLAGS(0) = '1' then	--close
+										error(4) <= '1';
+									else
+										error(4) <= '0'; 
 									end if;
 									validate_finish <= '1';
 									ready <= '1';
