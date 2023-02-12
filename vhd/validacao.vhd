@@ -17,16 +17,10 @@ entity validacao is
 		signal S_AXIS_TREADY 			: out std_logic;
 		signal S_AXIS_TLAST  			: in std_logic;
 		signal Spayload						:  out std_logic_vector(7 downto 0);
-		signal Ssoma							:  out unsigned (16 downto 0);
-		signal Sdata	: out unsigned (15 downto 0);
-		signal Sestado	: out unsigned (3 downto 0);
 		signal Flags    					: in std_logic_vector(7 downto 0); 	--MSB -> Sync, LSB -> Close
-		signal Schecksum				: in std_logic_vector (15 downto 0); 
-		signal Schecksum_out			: out unsigned (15 downto 0);	--para simulacao
+		signal Schecksum				: in std_logic_vector (15 downto 0);
+		signal Schecksum_out			: out unsigned (15 downto 0);	--para simulacao	
 		signal pckt_len					: in std_logic_vector (15 downto 0);
-		signal pckt_len_out     		: out unsigned (15 downto 0);		--para simulacao
-		signal dummy		    		: in std_logic_vector(15 downto 0);
-		signal prot    					: in std_logic_vector(7 downto 0);
 		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
 	);
 end entity validacao;
@@ -42,20 +36,15 @@ architecture ckt of validacao is
 	signal increment_pckt_len			: unsigned (15 downto 0) := (others => '0');
 	signal valid, last, ready, master_ready			: std_logic;
 	signal checksum				  	 	: unsigned (15 downto 0);	--checksum calculado pelo componente
-	signal ideal_dummy				    : unsigned (15 downto 0) := X"0000"; --dummy ideal
-	signal ideal_protocol				: unsigned (7 downto 0)  := X"18";	--protocol ideal
 
 	--signals para receber do header a informcao
 	signal checksum_rx					: std_logic_vector(15 downto 0);
 	signal packet_len_rx				: std_logic_vector(15 downto 0);
 	signal prot_rx 						: std_logic_vector(7 downto 0);
-	signal dummy_rx				   		: std_logic_vector(15 downto 0);
 	
 	--signals para trabalhar com operacao de comparacao para verificar a integridade da informacao
 	signal checksum_rx_unsign			: unsigned(15 downto 0);
 	signal packet_len_rx_unsign			: unsigned(15 downto 0);
-	signal prot_rx_unsign				: unsigned(7 downto 0);
-	signal dummy_rx_unsign			   	: unsigned(15 downto 0);
 
 	signal synchronize					: std_logic := '1';	--signal de sincronismo
 	signal transmission 					: std_logic := '1';
@@ -73,24 +62,15 @@ architecture ckt of validacao is
 		--dados recebidos do header
 		checksum_rx <= Schecksum;	--checksum do header
 		packet_len_rx <= pckt_len;	--pckt_len do header
-		prot_rx <= prot;			--protocol do header
-		dummy_rx <= dummy;			--dummy do header
-		Sdata <= data;
 		--Conversao para sinais unsigned
 		checksum_rx_unsign <= unsigned(checksum_rx);
 		packet_len_rx_unsign <= unsigned(packet_len_rx);
-		prot_rx_unsign <= unsigned(prot_rx);
-		dummy_rx_unsign <= unsigned(dummy_rx);
-		Sestado <= estado;
 		------------------------------------------
 
 		--recebendo sinais de saida
 		--sinais de saida apenas para simulacao
-		pckt_len_out <= increment_pckt_len;
-		Schecksum_out <= checksum;
 		Spayload <= payload;
-		Ssoma <= soma;
-		
+		Schecksum_out <= checksum;
 		
 		master_ready <= M_AXIS_TREADY;
 		

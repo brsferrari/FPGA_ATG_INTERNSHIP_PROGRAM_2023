@@ -29,7 +29,7 @@ architecture ckt of AXI is
 
 	signal estado 	: unsigned(3 downto 0) := "0000";
 	signal data		: std_logic_vector (7 downto 0);
-	signal valid, ready: std_logic;
+	signal valid: std_logic;
 	
 	
 	begin
