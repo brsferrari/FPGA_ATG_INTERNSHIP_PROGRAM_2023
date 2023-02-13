@@ -4,40 +4,39 @@ use IEEE.numeric_std.all;
 
 entity AXI is
 	port(
-		signal clk			   : in std_logic;
-		signal rst			   : in std_logic;
+		signal clk			   		: in std_logic;
+		signal rst			   		: in std_logic;
 	--Slave
-		signal S_AXIS_TDATA  	: in std_logic_vector (7 downto 0);
-		signal S_AXIS_TVALID 	: in std_logic;
-		--signal M_AXIS_TREADY		: in std_logic;
+		signal S_AXIS_TDATA  		: in std_logic_vector 	( 7 downto 0);
+		signal S_AXIS_TVALID 		: in std_logic;
 		
 		signal sync	: in std_logic; 
 
 	--header
-		signal Destination_Address : out std_logic_vector(15 downto 0);
-		signal Source_Address  		: out std_logic_vector(15 downto 0);
-		signal Dummy				   : out std_logic_vector(15 downto 0);	--sera sempre 0x0000
-		signal Protocol 				: out std_logic_vector(7 downto 0);  --sera sempre 0x18
-		signal Flags    				: out std_logic_vector(7 downto 0); --MSB -> Sync, LSB -> Close
-		signal Sequence_number  	: out std_logic_vector(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
-		signal Checksum				: out std_logic_vector(15 downto 0);
-		signal Packet_length			: out std_logic_vector(15 downto 0)
+		signal Destination_Address : out std_logic_vector	(15 downto 0);
+		signal Source_Address  		: out std_logic_vector	(15 downto 0);
+		signal Dummy				   : out std_logic_vector	(15 downto 0);	--sera sempre 0x0000
+		signal Protocol 				: out std_logic_vector	( 7 downto 0); --sera sempre 0x18
+		signal Flags    				: out std_logic_vector	( 7 downto 0); --MSB -> Sync, LSB -> Close
+		signal Sequence_number  	: out std_logic_vector	(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
+		signal Checksum				: out std_logic_vector	(15 downto 0);
+		signal Packet_length			: out std_logic_vector	(15 downto 0)
 	);
 end entity AXI;
 
 architecture ckt of AXI is
 
-	signal estado 	: unsigned(3 downto 0) := "0000";
-	signal data		: std_logic_vector (7 downto 0);
-	signal valid: std_logic;
+	signal estado 	: unsigned				( 3 downto 0) := "0000";
+	signal data		: std_logic_vector 	( 7 downto 0);
+	signal valid	: std_logic;
 	
-	
+-- Code
 	begin
 	
 		valid <= S_AXIS_TVALID;
 		data <= S_AXIS_TDATA;
-		--ready <= M_AXIS_TREADY;
-		
+	
+	-- Process
 		AXI4_Stream : Process(clk)
 				
 			begin

@@ -5,52 +5,54 @@ use IEEE.numeric_std.all;
 
 entity validacao is
 	port(
-		signal clk			   			: in std_logic;
-		signal rst			   			: in std_logic;
-		signal validate_finish				: out std_logic;
-		signal sync							: out std_logic;
-		signal M_AXIS_TREADY				: in std_logic;
+		signal clk			   						: in std_logic;
+		signal rst			   						: in std_logic;
+		signal validate_finish						: out std_logic;
+		signal sync										: out std_logic;
+		signal M_AXIS_TREADY							: in std_logic;
 
 	--Slave
-		signal S_AXIS_TDATA  			: in std_logic_vector (7 downto 0);
-		signal S_AXIS_TVALID 			: in std_logic;
-		signal S_AXIS_TREADY 			: out std_logic;
-		signal S_AXIS_TLAST  			: in std_logic;
-		signal Spayload						:  out std_logic_vector(7 downto 0);
-		signal Flags    					: in std_logic_vector(7 downto 0); 	--MSB -> Sync, LSB -> Close
-		signal Schecksum				: in std_logic_vector (15 downto 0);
-		signal Schecksum_out			: out unsigned (15 downto 0);	--para simulacao	
-		signal pckt_len					: in std_logic_vector (15 downto 0);
-		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
+		signal S_AXIS_TDATA  						: in std_logic_vector 	( 7 downto 0);
+		signal S_AXIS_TVALID 						: in std_logic;
+		signal S_AXIS_TREADY 						: out std_logic;
+		signal S_AXIS_TLAST  						: in std_logic;
+		signal Spayload								: out std_logic_vector	( 7 downto 0);
+		signal Flags    								: in std_logic_vector	( 7 downto 0); --MSB -> Sync, LSB -> Close
+		signal Schecksum								: in std_logic_vector 	(15 downto 0);
+		signal Schecksum_out							: out unsigned 			(15 downto 0);	--para simulacao	
+		signal pckt_len								: in std_logic_vector 	(15 downto 0);
+		signal error									: out std_logic_vector	( 5 downto 0) 	--comporta erro de checksum, pckt_len, dummy e protocol
 	);
 end entity validacao;
 
 architecture ckt of validacao is
 	
-	signal estado 						: unsigned(3 downto 0) := "0000";
-	signal estado2 						: unsigned (2 downto 0) := "000";
-	signal transmit_data				: std_logic_vector (7 downto 0);
-	signal payload						: std_logic_vector(7 downto 0);
-	signal data							: unsigned (15 downto 0);
-	signal soma							: unsigned (16 downto 0);
-	signal increment_pckt_len			: unsigned (15 downto 0) := (others => '0');
-	signal valid, last, ready, master_ready			: std_logic;
-	signal checksum				  	 	: unsigned (15 downto 0);	--checksum calculado pelo componente
+-- Variables
+	signal estado 										: unsigned					( 3 downto 0) := "0000";
+	signal estado2 									: unsigned 					( 2 downto 0) := "000";
+	signal transmit_data								: std_logic_vector 		( 7 downto 0);
+	signal payload										: std_logic_vector		( 7 downto 0);
+	signal data											: unsigned 					(15 downto 0);
+	signal soma											: unsigned 					(16 downto 0);
+	signal increment_pckt_len						: unsigned 					(15 downto 0) := (others => '0');
+	signal valid, last, ready, master_ready	: std_logic;
+	signal checksum				  	 				: unsigned 					(15 downto 0);	--checksum calculado pelo componente
 
 	--signals para receber do header a informcao
-	signal checksum_rx					: std_logic_vector(15 downto 0);
-	signal packet_len_rx				: std_logic_vector(15 downto 0);
-	signal prot_rx 						: std_logic_vector(7 downto 0);
+	signal checksum_rx								: std_logic_vector		(15 downto 0);
+	signal packet_len_rx								: std_logic_vector		(15 downto 0);
+	signal prot_rx 									: std_logic_vector		(7 downto 0);
 	
 	--signals para trabalhar com operacao de comparacao para verificar a integridade da informacao
-	signal checksum_rx_unsign			: unsigned(15 downto 0);
-	signal packet_len_rx_unsign			: unsigned(15 downto 0);
+	signal checksum_rx_unsign						: unsigned					(15 downto 0);
+	signal packet_len_rx_unsign					: unsigned					(15 downto 0);
 
-	signal synchronize					: std_logic := '1';	--signal de sincronismo
-	signal transmission 					: std_logic := '1';
+	signal synchronize								: std_logic := '1';							--signal de sincronismo
+	signal transmission 								: std_logic := '1';
 	
-	signal contador_len_payload : unsigned (7 downto 0) := (others => '0');
+	signal contador_len_payload 					: unsigned 					( 7 downto 0) := (others => '0');
 
+-- Code
 	begin
 		--signals do AXI
 		valid <= S_AXIS_TVALID;
@@ -74,6 +76,7 @@ architecture ckt of validacao is
 		
 		master_ready <= M_AXIS_TREADY;
 		
+	-- Process
 		Validacao : Process(clk, rst)
 			
 			begin

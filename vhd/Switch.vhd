@@ -4,109 +4,108 @@ use IEEE.numeric_std.all;
 
 entity SWITCH is
 	port(
-		signal clk			   				: in  std_logic;
-		signal rst			   				: in  std_logic;
+		signal clk			   					: in  std_logic;
+		signal rst			   					: in  std_logic;
 
 	--Master	
-		signal M_AXIS_TDATA  				: out std_logic_vector (7 downto 0); --somente quando houver erro
-		signal M_AXIS_TVALID 				: out std_logic;
-		signal M_AXIS_TREADY 				: in  std_logic;
-		signal M_AXIS_TLAST  				: out std_logic;		
-		signal PORTA							: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
-		signal PORTA_dest						: out std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
-		signal Source_addres_valid  		: out std_logic_vector(15 downto 0);
-		signal valid_error_out 				:  out std_logic_vector(5 downto 0);
-		signal Flags_reg_out    			:  out std_logic_vector(7 downto 0) := (others => '0'); --MSB -> Sync, LSB -> Close
+		signal M_AXIS_TDATA  					: out std_logic_vector 	( 7 downto 0); --somente quando houver erro
+		signal M_AXIS_TVALID 					: out std_logic;
+		signal M_AXIS_TREADY 					: in  std_logic;
+		signal M_AXIS_TLAST  					: out std_logic;		
+		signal PORTA								: in std_logic_vector	( 4 downto 0);	--qual porta esta enviando o dado
+		signal PORTA_dest							: out std_logic_vector	( 4 downto 0);	--qual porta esta enviando o dado
+		signal Source_addres_valid  			: out std_logic_vector	(15 downto 0);
+		signal valid_error_out 					: out std_logic_vector	( 5 downto 0);
+		signal Flags_reg_out    				: out std_logic_vector	( 7 downto 0) := (others => '0'); --MSB -> Sync, LSB -> Close
 	
-		signal DEST_ADDR_out						: out std_logic_vector(15 downto 0);
+		signal DEST_ADDR_out						: out std_logic_vector	(15 downto 0);
 
 	--Slave
-		signal S_AXIS_TDATA  				: in  std_logic_vector (7 downto 0); --envio de dados
-		signal S_AXIS_TVALID 				: in  std_logic;					--envio se o sinal eh valido
-		signal S_AXIS_TREADY 				: out std_logic;					--retorno do componente
-		signal S_AXIS_TLAST  				: in  std_logic						--envio no final da transmissao
+		signal S_AXIS_TDATA  					: in  std_logic_vector 	( 7 downto 0); --envio de dados
+		signal S_AXIS_TVALID 					: in  std_logic;								--envio se o sinal eh valido
+		signal S_AXIS_TREADY 					: out std_logic;								--retorno do componente
+		signal S_AXIS_TLAST  					: in  std_logic								--envio no final da transmissao
 		
 	);
 end entity SWITCH;
 
 architecture ckt of SWITCH is
 
-	signal data						:  std_logic_vector (7 downto 0); --signal para envio do dado e retorno do dado
-	signal valid, ready 	:  std_logic;
-	signal sync								:  std_logic;
-	signal Dest_Addr_reg 					:  std_logic_vector(15 downto 0);
-	signal Src_Addr_reg  					:  std_logic_vector(15 downto 0);
-	signal Dummy_reg				   		:  std_logic_vector(15 downto 0);	--sera sempre 0x0000
-	signal Protocol_reg 					:  std_logic_vector(7 downto 0);  --sera sempre 0x18
-	signal Flags_reg    					:  std_logic_vector(7 downto 0) := (others => '0'); --MSB -> Sync, LSB -> Close
-	signal Seq_num_reg  					:  std_logic_vector(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
-	signal Checksum_reg						: std_logic_vector(15 downto 0);
-	signal Packet_len_reg					: std_logic_vector(15 downto 0);
-	signal Seq_num_out					: unsigned (31 downto 0);
-	signal Spayload_i						:  std_logic_vector(7 downto 0);
+	signal data											: std_logic_vector 	( 7 downto 0); --signal para envio do dado e retorno do dado
+	signal valid, ready 								: std_logic;
+	signal sync											: std_logic;
+	signal Dest_Addr_reg 							: std_logic_vector	(15 downto 0);
+	signal Src_Addr_reg  							: std_logic_vector	(15 downto 0);
+	signal Dummy_reg				   				: std_logic_vector	(15 downto 0);	--sera sempre 0x0000
+	signal Protocol_reg 								: std_logic_vector	( 7 downto 0);  --sera sempre 0x18
+	signal Flags_reg    								: std_logic_vector	( 7 downto 0) := (others => '0'); --MSB -> Sync, LSB -> Close
+	signal Seq_num_reg  								: std_logic_vector	(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque hoyve erro
+	signal Checksum_reg								: std_logic_vector	(15 downto 0);
+	signal Packet_len_reg							: std_logic_vector	(15 downto 0);
+	signal Seq_num_out								: unsigned 				(31 downto 0);
+	signal Spayload_i									:  std_logic_vector	( 7 downto 0);
 		
-	signal valid_error 						: std_logic_vector(5 downto 0);
-	signal valid_error_i						: std_logic_vector(5 downto 0);
+	signal valid_error 								: std_logic_vector	( 5 downto 0);
+	signal valid_error_i								: std_logic_vector	( 5 downto 0);
 	
-	signal validate_finish : std_logic;
-	signal ADDRESS_TABLE_i				: std_logic_vector(79 downto 0);
+	signal validate_finish 							: std_logic;
+	signal ADDRESS_TABLE_i							: std_logic_vector	(79 downto 0);
 
-	signal PORTA_dest_i : std_logic_vector (4 downto 0);
+	signal PORTA_dest_i 								: std_logic_vector 	( 4 downto 0);
 
-	signal contador	: unsigned (29 downto 0) := (others => '0');
-	signal clk_1s		: std_logic;
+	signal contador									: unsigned 				(29 downto 0) := (others => '0');
+	signal clk_1s										: std_logic;
 	
-	signal estado_pckt_len, estado_checksum: unsigned(3 downto 0) := (others => '0');
-	signal estado_seq_num : unsigned(7 downto 0)  := (others => '0');
-	signal estado_nt_found_addr : std_logic := '0';
-	signal pckt_len_i : unsigned (15 downto 0);
-	signal checksum_esperado : unsigned(15 downto 0);
-	signal master_T_LAST : std_logic := '0';
-	signal FLAG_de_seqnum				: std_logic_vector(5 downto 0);
+	signal estado_pckt_len, estado_checksum	: unsigned				( 3 downto 0) := (others => '0');
+	signal estado_seq_num 							: unsigned				( 7 downto 0)  := (others => '0');
+	signal estado_nt_found_addr 					: std_logic := '0';
+	signal pckt_len_i 								: unsigned 				(15 downto 0);
+	signal checksum_esperado 						: unsigned				(15 downto 0);
+	signal master_T_LAST 							: std_logic := '0';
+	signal FLAG_de_seqnum							: std_logic_vector	( 5 downto 0);
 	
 	component AXI is
 		port(
-		signal clk			   				: in std_logic;
-		signal rst			   				: in std_logic;
+		signal clk			   						: in std_logic;
+		signal rst			   						: in std_logic;
 	--Slave
-		signal S_AXIS_TDATA  				: in std_logic_vector (7 downto 0);
-		signal S_AXIS_TVALID 				: in std_logic;
-		--signal M_AXIS_TREADY		: in std_logic;
+		signal S_AXIS_TDATA  						: in std_logic_vector ( 7 downto 0);
+		signal S_AXIS_TVALID 						: in std_logic;
 
-		signal sync							: in std_logic; 
+		signal sync										: in std_logic; 
 
 	--header
-		signal Destination_Address 			: out std_logic_vector(15 downto 0);
-		signal Source_Address  				: out std_logic_vector(15 downto 0);
-		signal Dummy				   		: out std_logic_vector(15 downto 0);	--deve sempre ser 0x0000
-		signal Protocol 					: out std_logic_vector(7 downto 0);  	--deve sempre ser 0x18
-		signal Flags    					: out std_logic_vector(7 downto 0); 	--MSB -> Sync, LSB -> Close
-		signal Sequence_number  			: out std_logic_vector(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque houve erro
-		signal Checksum						: out std_logic_vector(15 downto 0);
-		signal Packet_length				: out std_logic_vector(15 downto 0)
+		signal Destination_Address 				: out std_logic_vector	(15 downto 0);
+		signal Source_Address  						: out std_logic_vector	(15 downto 0);
+		signal Dummy				   				: out std_logic_vector	(15 downto 0);	--deve sempre ser 0x0000
+		signal Protocol 								: out std_logic_vector	( 7 downto 0);  	--deve sempre ser 0x18
+		signal Flags    								: out std_logic_vector	( 7 downto 0); 	--MSB -> Sync, LSB -> Close
+		signal Sequence_number  					: out std_logic_vector	(31 downto 0);	--comeca com um valor e sempre incrementa, se for uma seq diferente eh porque houve erro
+		signal Checksum								: out std_logic_vector	(15 downto 0);
+		signal Packet_length							: out std_logic_vector	(15 downto 0)
 	);
 	end component AXI;
 	
 	
 	component validacao is
 		port(
-		signal clk			   			: in std_logic;
-		signal rst			   			: in std_logic;
-		signal validate_finish				: out std_logic;
-		signal sync							: out std_logic;
-		signal M_AXIS_TREADY				: in std_logic;
+		signal clk			   						: in std_logic;
+		signal rst			   						: in std_logic;
+		signal validate_finish						: out std_logic;
+		signal sync										: out std_logic;
+		signal M_AXIS_TREADY							: in std_logic;
 
 	--Slave
-		signal S_AXIS_TDATA  			: in std_logic_vector (7 downto 0);
-		signal S_AXIS_TVALID 			: in std_logic;
-		signal S_AXIS_TREADY 			: out std_logic;
-		signal S_AXIS_TLAST  			: in std_logic;
-		signal Spayload						:  out std_logic_vector(7 downto 0);
-		signal Flags    					: in std_logic_vector(7 downto 0); 	--MSB -> Sync, LSB -> Close
-		signal Schecksum				: in std_logic_vector (15 downto 0); 
-		signal Schecksum_out			: out unsigned (15 downto 0);	--para simulacao
-		signal pckt_len					: in std_logic_vector (15 downto 0);
-		signal error					: out std_logic_vector(5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
+		signal S_AXIS_TDATA  						: in std_logic_vector 	( 7 downto 0);
+		signal S_AXIS_TVALID 						: in std_logic;
+		signal S_AXIS_TREADY 						: out std_logic;
+		signal S_AXIS_TLAST  						: in std_logic;
+		signal Spayload								: out std_logic_vector	( 7 downto 0);
+		signal Flags    								: in std_logic_vector 	( 7 downto 0); 	--MSB -> Sync, LSB -> Close
+		signal Schecksum								: in std_logic_vector 	(15 downto 0); 
+		signal Schecksum_out							: out unsigned 			(15 downto 0);	--para simulacao
+		signal pckt_len								: in std_logic_vector 	(15 downto 0);
+		signal error									: out std_logic_vector	( 5 downto 0) 		--comporta erro de checksum, pckt_len, dummy e protocol
 	);
 	end component validacao;
 	
@@ -114,19 +113,19 @@ architecture ckt of SWITCH is
 	
 	component tabela_dinamica is
 	port(
-		signal clk			   				: in std_logic;
-		signal rst			   				: in std_logic;
-		signal validate_finish				: in std_logic;
-		signal tlast							: in std_logic;
-		signal seqnum							: in unsigned (31 downto 0); --header
-		signal seqnum_component				: out unsigned (31 downto 0); 
-		signal FLAG_de_seqnum				: out std_logic_vector(5 downto 0);
-		signal SRC_ADDR						: in std_logic_vector(15 downto 0);
-		signal SRC_ADDR_out					: out std_logic_vector(15 downto 0);
-		signal PORTA							: in std_logic_vector(4 downto 0);	--qual porta esta enviando o dado
-		signal ERRO_da_validacao 			: in std_logic_vector(5 downto 0);
-		signal ADDRESS_TABLE 				: out std_logic_vector(79 downto 0);
-		signal FLAGS							: in std_logic_vector(7 downto 0)
+		signal clk			   						: in std_logic;
+		signal rst			   						: in std_logic;
+		signal validate_finish						: in std_logic;
+		signal tlast									: in std_logic;
+		signal seqnum									: in unsigned 				(31 downto 0); --header
+		signal seqnum_component						: out unsigned 			(31 downto 0); 
+		signal FLAG_de_seqnum						: out std_logic_vector	( 5 downto 0);
+		signal SRC_ADDR								: in std_logic_vector	(15 downto 0);
+		signal SRC_ADDR_out							: out std_logic_vector	(15 downto 0);
+		signal PORTA									: in std_logic_vector	( 4 downto 0);	--qual porta esta enviando o dado
+		signal ERRO_da_validacao 					: in std_logic_vector	( 5 downto 0);
+		signal ADDRESS_TABLE 						: out std_logic_vector	(79 downto 0);
+		signal FLAGS									: in std_logic_vector	( 7 downto 0)
 		);
 	end component tabela_dinamica;
 	
@@ -137,12 +136,12 @@ architecture ckt of SWITCH is
 			signal clk			   				: in std_logic;
 			signal rst			   				: in std_logic;
 			signal validate_finish				: in std_logic;
-			signal entrada_de_erro				: in std_logic_vector(5 downto 0);
-			signal ERRO  							: out std_logic_vector(5 downto 0);
-			signal ADDRESS_TABLE 				: in std_logic_vector(79 downto 0);
-			signal DEST_ADDR						: in std_logic_vector(15 downto 0);
-			signal FLAGS							: in std_logic_vector(7 downto 0);
-			signal DEST_PORT                 : out std_logic_vector(4 downto 0)
+			signal entrada_de_erro				: in std_logic_vector		( 5 downto 0);
+			signal ERRO  							: out std_logic_vector		( 5 downto 0);
+			signal ADDRESS_TABLE 				: in std_logic_vector		(79 downto 0);
+			signal DEST_ADDR						: in std_logic_vector		(15 downto 0);
+			signal FLAGS							: in std_logic_vector		( 7 downto 0);
+			signal DEST_PORT                 : out std_logic_vector		( 4 downto 0)
 		);
 	end component identificador_de_porta;
 	
